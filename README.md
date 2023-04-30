@@ -10,6 +10,8 @@ The goal of this project was to predict protein expression levels using RNA gene
 - GeneProject_MLP_model.py contains Multi-Layer Perceptron's model
 - GeneProject_PC_regression.ipynb contains TruncatedSVD (PCA) feature engineering and Linear Regression model
 - Test_MLP.sb contains the sbatch file to submit jobs to a cluster from the MLP model (GeneProject_MLP_model.py)
+- You can find the necessary data files for this project on the following website: https://www.dropbox.com/sh/dg10o9wmfmd2cpi/AABWGBng2HeU3g14D1dD20Wia?dl=0 
+    - Please note that each file contains high MB and may take some time to download.
 
 ## Methods
 
