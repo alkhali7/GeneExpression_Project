@@ -6,7 +6,7 @@
 # The goal for this notebook is to build some DL models
 
 # In[4]:
-
+# you would need to install those libraries below in order for the codes to run
 
 # get_ipython().system('pip install torch_geometric')
 # get_ipython().system('pip install packaging')
