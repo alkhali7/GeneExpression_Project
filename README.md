@@ -23,8 +23,8 @@ Next, machine learning models were used to predict protein expression levels fro
 
 Training a linear regression model on the PCA-transformed data with n_components set to 50, results in an RMSE of 0.3813 on the test set. When applying normalization to the data to improve performance, not all models would perform better after, like in our case the PCA-only model. This improved normalized PCR achieved an RMSE of 0.3717. Applying PCA alone to the dataset with n_components set to 10 resulted in an RMSE of 0.41 on the test set. However, this was expected since PCA alone with linear regression can be improved on as stated later.
 
-The best model was the PCA_KNN model, which combined PCA with KNN. It had an RMSE of 0.35462 when KNN was applied without normalization to the PCA-transformed data with n_components set to 70 and n_neighbors set to 50.
+The best model was the PCA_KNN model, which combined PCA with KNN. It had an RMSE of 0.35462 when KNN was applied without normalization to the PCA-transformed data with n_components set to 70 and n_neighbors set to 50. MLP model also had a pretty similar rmse, being 0.3505 which means it can compete with the KNN/PCA model in future analyzation.
 
 ## Conclusion
 
-In conclusion, combining PCA with KNN resulted in the best model for predicting protein expression levels using RNA gene expression data. The project shows how machine learning can be applied to molecular biology data to make predictions and gain insights.
+In conclusion, combining PCA with KNN and preforming MLP resulted in the best models for predicting protein expression levels using RNA gene expression data. The project shows how machine learning can be applied to molecular biology data to make predictions and gain insights.
