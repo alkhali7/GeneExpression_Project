@@ -1,93 +1,62 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-# # MLP
-# 
-# The goal for this notebook is to build some DL models
-
-# In[4]:
-# you would need to install those libraries below in order for the codes to run
-
-# get_ipython().system('pip install torch_geometric')
-# get_ipython().system('pip install packaging')
-# get_ipython().system('pip install  dgl -f https://data.dgl.ai/wheels/cu117/repo.html')
-# get_ipython().system('pip install  dglgo -f https://data.dgl.ai/wheels-test/repo.html')
-# get_ipython().system('pip install -r /Users/shamsalkhalidy/Downloads/pydance/requirements.txt')
-# get_ipython().system('pip install -e /Users/shamsalkhalidy/Downloads/pydance')
-
-
-# # In[5]:
-
-
-# get_ipython().system('pip install mudata')
-
-
-# # In[6]:
-
-
-# get_ipython().system('git clone https://github.com/OmicsML/dance.git pydance')
-
-
-# In[7]:
-
-
 import torch
 import torch.nn as nn
-import anndata as ad
-from sklearn.metrics import mean_squared_error
-
-
-# In[8]:
-
-
 import torch.optim as optim
 # import torch.trainloader
 from torch.utils.data import TensorDataset, DataLoader
+import logging
+import anndata as ad
+import numpy as np
+ 
 
-# Hyperparameters for our network
-input_size = 13953
-hidden_sizes = [512, 256, 256]
-output_size = 134
-
-# Build a feed-forward network
-MLP = nn.Sequential(nn.Linear(input_size, hidden_sizes[0]),
-                      nn.ReLU(),
-                      nn.Linear(hidden_sizes[0], hidden_sizes[1]),
-                      nn.ReLU(),
-                      nn.Linear(hidden_sizes[1], hidden_sizes[2]),
-                      nn.ReLU(),
-                      nn.Linear(hidden_sizes[2], output_size))
-print(MLP)
-
-
-# In[9]:
+from scipy.sparse import csc_matrix
+from sklearn.decomposition import TruncatedSVD
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import r2_score
+logging.basicConfig(level=logging.INFO)
+from sklearn.decomposition import PCA
+from sklearn.metrics import mean_squared_error
+from sklearn.neighbors import KNeighborsRegressor #used KNN
+from tqdm import tqdm
+import math
+import pickle
 
 
+
+print("reading data from files")
 Y_train = ad.read_h5ad("Adt_processed_training.h5ad") #gex is gene expression which are RNA
 Y_test = ad.read_h5ad("Adt_processed_testing.h5ad") #gex is gene expression which are RNA
 X_train = ad.read_h5ad("Gex_processed_training.h5ad") # adt is protein
 X_test = ad.read_h5ad("Gex_processed_testing.h5ad") # adt is protein
 
+ 
 
-# In[11]:
+# Perform PCA on training data
+print("Preform PCA on training data")
+pca = TruncatedSVD(n_components=200)
+X_train_pca = pca.fit_transform(X_train.X.toarray())
+
+ 
+
+# Transform test data with trained PCA
+X_test_pca = pca.transform(X_test.X.toarray())
 
 
-X_train.X.toarray().shape
+X_train = X_train_pca
+X_test = X_test_pca
+ 
 
 
-# In[12]:
+print("Get data ready for MLP")
 
-
-import numpy as np
 idx = np.random.permutation(X_train.shape[0])
 valid_ratio = 0.15
 train_idx = idx[:-int(X_train.shape[0]*valid_ratio)]
 val_idx = idx[-int(X_train.shape[0]*valid_ratio):]
-X_train_tensor = torch.Tensor(X_train.X[train_idx].toarray())
+X_train_tensor = torch.Tensor(X_train[train_idx])
 Y_train_tensor = torch.Tensor(Y_train.X[train_idx].toarray())
-X_valid_tensor = torch.Tensor(X_train.X[val_idx].toarray())
+X_valid_tensor = torch.Tensor(X_train[val_idx])
 Y_valid_tensor = torch.Tensor(Y_train.X[val_idx].toarray())
-X_test_tensor  = torch.Tensor(X_test.X.toarray())
+X_test_tensor  = torch.Tensor(X_test)
 Y_test_tensor  = torch.Tensor(Y_test.X.toarray())
 
 idx = np.random.permutation(X_train.shape[0])
@@ -100,18 +69,33 @@ validloader = torch.utils.data.DataLoader(mydata_val, batch_size = 64, shuffle=F
 testloader = torch.utils.data.DataLoader(mydata_test, batch_size = 64, shuffle=True)
 
 
-# In[13]:
+print(X_train.shape)
+
+input_size = X_train.shape[1]
+hidden_sizes = [512, 256, 128]
+output_size = 134
+MLP = nn.Sequential(
+    nn.Linear(input_size, hidden_sizes[0]),
+    nn.ReLU(),
+    nn.Linear(hidden_sizes[0], hidden_sizes[1]),
+    nn.ReLU(),
+    nn.Linear(hidden_sizes[1], hidden_sizes[2]),
+    nn.ReLU(),
+   
+    nn.Linear(hidden_sizes[2], output_size)
+)
+
+print(MLP)
 
 
-from tqdm import tqdm #tqdm derives from the Arabic word taqaddum (تقدّم)
-import math
+
 def evaluate(model):
     running_loss = 0
     with torch.no_grad():
         for data, target in validloader:
            
             # Forward pass
-            output = MLP(data) 
+            output = MLP(data)
             loss = criterion(output, target)
             running_loss += math.sqrt(loss.item())  # why need to add?
     return running_loss/len(validloader)
@@ -121,8 +105,8 @@ criterion = nn.MSELoss() # Optimizers require the parameters to optimize and a l
 optimizer = torch.optim.Adam(MLP.parameters())
 
 
-# In[14]:
 
+print("Before")
 
 num_epochs = 20 # 15
 for epoch in (pbar := tqdm(range(num_epochs))):
@@ -139,99 +123,95 @@ for epoch in (pbar := tqdm(range(num_epochs))):
         # Print the loss every 5 epochs
     if (epoch+1) % 5 == 0:
         pbar.set_description(f'Epoch {epoch} | Train loss: {running_loss/len(trainloader):.4f} | Valid loss: {evaluate(MLP):.4f}')
-          
+         
+print("done with mlp training")
 
 
-# In[15]:
+pred_Y = MLP(torch.Tensor(X_test))
+gpu = pred_Y.detach().numpy()
 
 
-pred_Y = MLP(torch.Tensor(X_test.X.toarray()))
-    # Calculate RMSE
 
 
-# In[19]:
+
+# KNN model
+def baseline_linear(input_train_gex, input_train_adt, input_test_gex):
+    '''Baseline method training a KNN regressor on the input data'''
+    input_gex = ad.concat(
+        {"train": input_train_gex, "test": input_test_gex},
+        axis = 0,
+        join = "outer",
+        label = "group",
+        fill_value = 0,
+        index_unique = "-",
+    )
 
 
-rmse = mean_squared_error(Y_test.X.toarray(), pred_Y.detach().numpy(), squared = False)
+    # Do PCA on the input data
+    logging.info('Performing dimensionality reduction on GEX values...')
+    embedder_gex = TruncatedSVD(n_components = 70)
+    gex_pca = embedder_gex.fit_transform(input_gex.X)
+
+   
+
+    # split dimension reduction GEX back up for training
+    X_train = gex_pca[input_gex.obs['group'] == 'train']
+    X_test = gex_pca[input_gex.obs['group'] == 'test']
+    y_train = input_train_adt.X.toarray()
+
+    assert len(X_train) + len(X_test) == len(gex_pca)
+
+   
+    logging.info('Running KNN regression...')
+    reg =  KNeighborsRegressor(n_neighbors=200)
+    
+
+    # Train the model on the PCA reduced gex 1 and 2 data
+    reg.fit(X_train, y_train)
+    
+    # Save the trained KNN model to a file
+    with open('mlp_knn_pca.pickle', 'wb') as f:
+        pickle.dump(reg, f)
+
+    y_pred = reg.predict(X_test)
+
+
+    # Project the predictions back to the adt feature space
+
+    pred_test_adt = ad.AnnData(
+        X = y_pred,
+        obs = input_test_gex.obs,
+        var = input_train_adt.var,
+    )
+
+    # Add the name of the method to the result
+    pred_test_adt.uns["method"] = "KNN"
+
+    return pred_test_adt
+
+
+
+# Get Data ready for linear
+input_train_gex  = ad.read_h5ad("Gex_processed_training.h5ad") #GEX training
+input_train_adt = ad.read_h5ad("Adt_processed_training.h5ad") # Adt training
+input_test_gex = ad.read_h5ad("Gex_processed_testing.h5ad") #GEX test
+true_test_adt = ad.read_h5ad("Adt_processed_testing.h5ad")  #Adt test
+
+# run linear
+pred_test_adt = baseline_linear(input_train_gex, input_train_adt, input_test_gex)
+
+
+# averaging the mlp and knn 
+pcamlpknn = np.mean( np.array([ gpu, pred_test_adt.X ]), axis=0 )
+
+
+
+
+rmse = mean_squared_error(Y_test.X.toarray(), pcamlpknn, squared = False)
     # Print results
-print('MLP had a RMSE of ', rmse)
+print('MLP had a RMSE of ', rmse) #MLP had a RMSE of  0.34448
 type(pred_Y)
 
 
-# In[32]:
 
 
-X_train.obs['cell_type']
-
-
-# In[33]:
-
-
-X_test.obs['cell_type']
-
-
-# In[25]:
-
-
-cell_type = X_test.obs['cell_type']
-
-
-cell_type
-
-
-# In[ ]:
-
-
-tmp_X.shape
-
-
-# In[31]:
-
-
-result = np.zeros(44)
-for cell in cell_type:
-    id = X_test.obs['cell_type'] == cell
-    tmp_X = X_test.X.toarray()[id, :]
-    pred_Y = MLP(torch.Tensor(tmp_X))
-    rmse = mean_squared_error(Y_test.X.toarray()[id, :], pred_Y.detach().numpy(), squared = False)
-    print(cell, ' ', rmse)
-    np.append(result, rmse)
-    
-
-
-# In[30]:
-
-
-result
-
-
-# ### RMSE Metric
-# 
-# The metric for task 1 is RMSE on the `adata.X` data.
-
-# In[17]:
-
-
-def calculate_rmse(true_test_mod2, pred_test_mod2):
-    return  mean_squared_error(true_test_mod2.X.toarray(), pred_test_mod2.X, squared=False) # .toarray will turn it to numpy array
-
-
-# In[74]:
-
-
-plt.scatter(pred_Y.detach().numpy()[12, :], Y_test.X.toarray()[12, :])
-
-
-# In[130]:
-
-
-for method in [baseline_PC_regression2, baseline_mean]:
-    # Run prediction
-    pred_Y = method(X_train, Y_train, X_test)
-    # Calculate RMSE
-    rmse = calculate_rmse(Y_test, pred_Y)
-    # Print results
-    print(f'{pred_Y.uns["method"]} had a RMSE of {rmse:.4f}')
-
-
-# As expected, the linear model does better than the dummy method. Now the challenge is up to you! Can you do better than this baseline?
